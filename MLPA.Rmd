@@ -1,0 +1,123 @@
+---
+title: "Machine Learning"
+author: "Yuri Ferreira"
+date: "February 25, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prediction Assignment
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+##Data load and pre transformation
+
+```{r loading libraries}
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(rattle)
+```
+
+
+```{r loading files, cache=TRUE}
+data<- read.csv("pml-training.csv")
+pmltesting <- read.csv("pml-testing.csv")
+```
+
+First I excluded variables with at least 80% NAs or blank values.
+Excluded also some columns with temporal values and the INDEX variable
+
+```{r data pre processing}
+
+#selecting columns with at least 80% NAs values or blank values
+
+limit <-length(data$X) * 0.8
+data[data==""] <- NA
+
+isna <-data.frame(sapply(data,is.na))
+colnames <- names(data)
+
+NAcols <- vector()
+
+for (i in 1:length(colnames)){
+    if (sum(isna[[i]]) > 0){
+        NAcols <-c(NAcols,i)
+    }
+}
+
+
+#selecting columns with temporal valuesand near zero variance (we won't need them)
+
+Timecols<- grep("time",colnames)
+
+
+#removing unecessary columns from the data and pmltesting 
+
+remcols <- c(NAcols,Timecols,1,2,6,7)
+
+
+data<-select(data,-remcols)
+pmltesting<-select(pmltesting,-remcols)
+
+```
+##Subsetting data
+
+I created two subsets, one for only training and one for testing my models.
+
+```{r subsetting data}
+#set seed
+set.seed(12345)
+
+#subset testing into training, testing and validation
+
+
+inTrain <- createDataPartition(y = data$classe,p = 0.7,list=FALSE)
+training <- data[inTrain,]
+testing <- data[-inTrain,]
+
+```
+
+## Models
+
+I first tried Rpart model, which is simpler, but i got a very low accuracy.
+Then i tried Boosting models and Random Forest.
+
+```{r creating models, cache=TRUE}
+
+modelRPART <- train(classe ~ ., method = "rpart",data = training)
+predRPART <- predict(modelRPART,testing)
+cmRPART <- confusionMatrix(predRPART,testing$classe)
+
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modelGBM <- train(classe ~ ., method = "gbm",data = training,trControl = controlGBM ,verbose = FALSE)
+predGBM <- predict(modelGBM,testing)
+cmGBM <- confusionMatrix(predGBM,testing$classe)
+
+modelRF <- train(classe ~ ., method = "rf",data = training, verbose = FALSE)
+predRF <- predict(modelRF,testing)
+cmRF <- confusionMatrix(predRF,testing$classe)
+```
+## Model Selection and Cross Validation
+
+Trough cross validation, the best selected model was the random forest.
+```{r model selection}
+print("Regression and Classification tree results")
+cmRPART
+print("Gradient and Boosting Model Results")
+cmGBM
+print("Random Forest Model Results")
+cmRF
+``` 
+#Results
+Then i predicted the testing set with my model, getting this output.
+```{r predicted values}
+pred <- predict(modelRF,pmltesting)
+pred
+```
